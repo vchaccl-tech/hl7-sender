@@ -154,7 +154,7 @@ Si encuentras un bug o tienes una sugerencia, por favor abre un [issue](https://
 
 ## ✨ Autor
 
-Desarrollado con ❤️ por Victor Chacón + Antigravity by Google
+Desarrollado por vchac + Antigravity by Google
 
 ## 🙏 Agradecimientos
 
