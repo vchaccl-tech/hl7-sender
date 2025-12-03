@@ -28,7 +28,7 @@ Una aplicación de escritorio moderna para enviar y probar mensajes HL7 a travé
 ### Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/hl7-sender.git
+git clone https://github.com/vchaccl-tech/hl7-sender.git
 cd hl7-sender
 ```
 
@@ -150,7 +150,7 @@ Las contribuciones son bienvenidas. Por favor:
 
 ## 🐛 Reportar Problemas
 
-Si encuentras un bug o tienes una sugerencia, por favor abre un [issue](https://github.com/tu-usuario/hl7-sender/issues).
+Si encuentras un bug o tienes una sugerencia, por favor abre un [issue](https://github.com/vchaccl-tech/hl7-sender/issues).
 
 ## ✨ Autor
 
