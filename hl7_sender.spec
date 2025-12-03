@@ -38,7 +38,7 @@ exe = EXE(
 )
 app = BUNDLE(
     exe,
-    name='hl7_sender.app',
+    name='HL7 Sender.app',
     icon='icon.icns',
     bundle_identifier='com.vchac.hl7sender',
 )
