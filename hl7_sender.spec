@@ -41,4 +41,5 @@ app = BUNDLE(
     name='HL7 Sender.app',
     icon='icon.icns',
     bundle_identifier='com.vchac.hl7sender',
+    version='1.0.0',
 )

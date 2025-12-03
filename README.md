@@ -5,6 +5,7 @@ Una aplicación de escritorio moderna para enviar y probar mensajes HL7 a travé
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-green.svg)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4+-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0-blue.svg)
 
 ## 🌟 Características
 

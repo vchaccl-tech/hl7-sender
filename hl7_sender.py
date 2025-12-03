@@ -27,6 +27,8 @@ from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QCli
 from PyQt6.QtCore import Qt
 import re # Para expresiones regulares en el resaltador de sintaxis
 
+VERSION = "1.0"
+
 def get_app_config_path(app_name):
     """Devuelve la ruta estándar para la configuración de la aplicación."""
     if sys.platform == 'darwin':  # macOS
@@ -40,7 +42,7 @@ SETTINGS_FILE = get_app_config_path('HL7Sender')
 
 TRANSLATIONS = {
     "es": {
-        "window_title": "HL7 Sender",
+        "window_title": f"HL7 Sender v{VERSION}",
         "config_group": "Configuración",
         "host": "Host:",
         "port": "Puerto:",
@@ -114,7 +116,7 @@ TRANSLATIONS = {
         "ack_decoded": "ACK Recibido (Error de decodificación con {}):\n{}\n\n{}"
     },
     "en": {
-        "window_title": "HL7 Sender",
+        "window_title": f"HL7 Sender v{VERSION}",
         "config_group": "Configuration",
         "host": "Host:",
         "port": "Port:",
@@ -276,7 +278,7 @@ class Hl7Highlighter(QSyntaxHighlighter):
 class HL7SenderApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("HL7 Sender")
+        self.setWindowTitle(f"HL7 Sender v{VERSION}")
         
         # Usar ruta absoluta para el icono para asegurar que se encuentre
         # independientemente de desde dónde se ejecute el script
