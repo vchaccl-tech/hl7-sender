@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QTextEdit, QCheckBox, QGroupBox, QMessageBox, QComboBox,
                              QFileDialog, QInputDialog, QSplitter)
-from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QClipboard, QAction
+from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QClipboard, QAction, QIcon
 from PyQt6.QtCore import Qt
 import re # Para expresiones regulares en el resaltador de sintaxis
 
@@ -277,6 +277,18 @@ class HL7SenderApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("HL7 Sender")
+        
+        # Usar ruta absoluta para el icono para asegurar que se encuentre
+        # independientemente de desde dónde se ejecute el script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(script_dir, "icon.png")
+        
+        if os.path.exists(icon_path):
+            app_icon = QIcon(icon_path)
+            self.setWindowIcon(app_icon)
+            # Establecer el icono en la aplicación globalmente
+            QApplication.setWindowIcon(app_icon)
+            
         self.setGeometry(100, 100, 960, 700)
 
         self.central_widget = QWidget()
