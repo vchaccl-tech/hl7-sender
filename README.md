@@ -7,6 +7,8 @@ Una aplicación de escritorio moderna para enviar y probar mensajes HL7 a travé
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.4+-orange.svg)
 ![Version](https://img.shields.io/badge/version-1.0-blue.svg)
 
+![Screenshot](Screenshot.png)
+
 ## 🌟 Características
 
 - **Envío de mensajes HL7** a través de MLLP con soporte para ACK/NACK
