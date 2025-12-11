@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QTextEdit, QCheckBox, QGroupBox, QMessageBox, QComboBox,
                              QFileDialog, QInputDialog, QSplitter)
-from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QClipboard, QAction, QIcon
+from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QClipboard, QAction, QIcon, QKeySequence
 from PyQt6.QtCore import Qt
 import re # Para expresiones regulares en el resaltador de sintaxis
 
@@ -113,7 +113,9 @@ TRANSLATIONS = {
         "ack_timeout": "Error: Tiempo de espera agotado. Verifique que el servidor esté escuchando y que no haya un firewall bloqueando la conexión.",
         "ack_refused": "Error: Conexión rechazada. Verifique que la IP y el puerto son correctos y que el servidor está en ejecución.",
         "ack_raw": "Respuesta Raw (Invalid MLLP):\n{}",
-        "ack_decoded": "ACK Recibido (Error de decodificación con {}):\n{}\n\n{}"
+        "ack_decoded": "ACK Recibido (Error de decodificación con {}):\n{}\n\n{}",
+        "menu_zoom_in": "Acercar",
+        "menu_zoom_out": "Alejar"
     },
     "en": {
         "window_title": f"HL7 Sender v{VERSION}",
@@ -187,7 +189,9 @@ TRANSLATIONS = {
         "ack_timeout": "Error: Timed out. Check if server is listening and no firewall is blocking.",
         "ack_refused": "Error: Connection refused. Check IP and Port are correct and server is running.",
         "ack_raw": "Raw Response (Invalid MLLP):\n{}",
-        "ack_decoded": "ACK Received (Decoding error with {}):\n{}\n\n{}"
+        "ack_decoded": "ACK Received (Decoding error with {}):\n{}\n\n{}",
+        "menu_zoom_in": "Zoom In",
+        "menu_zoom_out": "Zoom Out"
     }
 }
 
@@ -398,6 +402,18 @@ class HL7SenderApp(QMainWindow):
         self.dark_mode_action.setChecked(False)
         self.dark_mode_action.triggered.connect(self.toggle_dark_mode)
         self.view_menu.addAction(self.dark_mode_action)
+
+        self.view_menu.addSeparator()
+
+        self.zoom_in_action = QAction(self.tr("menu_zoom_in"), self)
+        self.zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
+        self.zoom_in_action.triggered.connect(self.zoom_in)
+        self.view_menu.addAction(self.zoom_in_action)
+
+        self.zoom_out_action = QAction(self.tr("menu_zoom_out"), self)
+        self.zoom_out_action.setShortcut(QKeySequence.StandardKey.ZoomOut)
+        self.zoom_out_action.triggered.connect(self.zoom_out)
+        self.view_menu.addAction(self.zoom_out_action)
         
         # Menú Idioma
         self.lang_menu = self.view_menu.addMenu("&Idioma")
@@ -484,7 +500,7 @@ class HL7SenderApp(QMainWindow):
         msg_layout.setContentsMargins(6, 6, 6, 6)
         
         self.msg_text = QTextEdit()
-        self.msg_text.setFont(QFont("Consolas", 14))
+        self.msg_text.setFont(QFont("Consolas", 13))
         self.msg_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap) # Enable horizontal scrolling
         self.msg_text.setStyleSheet("QTextEdit { background-color: white; color: black; }")
         msg_layout.addWidget(self.msg_text)
@@ -498,7 +514,7 @@ class HL7SenderApp(QMainWindow):
         resp_layout = QVBoxLayout()
         resp_layout.setContentsMargins(6, 6, 6, 6)
         self.resp_text = QTextEdit()
-        self.resp_text.setFont(QFont("Consolas", 14))
+        self.resp_text.setFont(QFont("Consolas", 13))
         self.resp_text.setReadOnly(True)
         self.resp_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap) # Enable horizontal scrolling
         self.resp_text.setStyleSheet("QTextEdit { background-color: white; color: black; }")
@@ -707,6 +723,14 @@ class HL7SenderApp(QMainWindow):
 
         self.hl7_response_highlighter.set_dark_mode(self.dark_mode)
 
+    def zoom_in(self):
+        self.msg_text.zoomIn(1)
+        self.resp_text.zoomIn(1)
+
+    def zoom_out(self):
+        self.msg_text.zoomOut(1)
+        self.resp_text.zoomOut(1)
+
     def change_language(self, lang_code):
         if lang_code == self.current_lang:
             return
@@ -792,6 +816,8 @@ class HL7SenderApp(QMainWindow):
         
         self.view_menu.setTitle(self.tr("menu_view"))
         self.dark_mode_action.setText(self.tr("menu_dark_mode"))
+        self.zoom_in_action.setText(self.tr("menu_zoom_in"))
+        self.zoom_out_action.setText(self.tr("menu_zoom_out"))
         self.lang_menu.setTitle(self.tr("menu_lang"))
 
     def _populate_profiles_combo(self):
