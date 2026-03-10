@@ -5,7 +5,7 @@ a = Analysis(
     ['hl7_sender.py'],
     pathex=[],
     binaries=[],
-    datas=[('icon.png', '.')],
+    datas=[('icon.png', '.'), ('reference', 'reference')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

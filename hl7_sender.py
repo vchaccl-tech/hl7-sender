@@ -19,13 +19,25 @@ import socket
 import json
 import os
 from datetime import datetime
+import xml.etree.ElementTree as ET
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QTextEdit, QCheckBox, QGroupBox, QMessageBox, QComboBox,
-                             QFileDialog, QInputDialog, QSplitter)
+                             QFileDialog, QInputDialog, QSplitter, QTreeWidget, QTreeWidgetItem,
+                             QHeaderView, QAbstractItemView)
 from PyQt6.QtGui import QFont, QTextCharFormat, QSyntaxHighlighter, QColor, QClipboard, QAction, QIcon, QKeySequence
 from PyQt6.QtCore import Qt
 import re # Para expresiones regulares en el resaltador de sintaxis
+
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(base_path, relative_path)
 
 VERSION = "1.0"
 
@@ -195,6 +207,121 @@ TRANSLATIONS = {
     }
 }
 
+class HL7DefinitionManager:
+    """Clase para manejar las definiciones XML de HL7."""
+    def __init__(self, base_path):
+        self.base_path = base_path
+        self.definitions_cache = {}
+
+    def get_version_path(self, version):
+        """Devuelve la ruta al directorio de definiciones para una versión específica."""
+        # Mapeo simple de versiones a directorios si es necesario, o uso directo
+        return os.path.join(self.base_path, "reference", version)
+
+    def is_version_available(self, version):
+        """Verifica si existen definiciones para la versión dada."""
+        path = self.get_version_path(version)
+        return os.path.isdir(path)
+
+    def load_segment_definition(self, version, segment_name):
+        """Carga la definición de un segmento desde el archivo XML."""
+        cache_key = f"{version}_{segment_name}"
+        if cache_key in self.definitions_cache:
+            return self.definitions_cache[cache_key]
+
+        version_path = self.get_version_path(version)
+        # Intentar cargar segment{Name}.xml
+        file_path = os.path.join(version_path, f"segment{segment_name}.xml")
+        
+        if not os.path.exists(file_path):
+            # Fallback o intentar otro nombre si es necesario
+            return None
+
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            self.definitions_cache[cache_key] = root
+            return root
+        except Exception as e:
+            print(f"Error loading segment definition {segment_name} for version {version}: {e}")
+            return None
+
+    def load_datatype_definition(self, version, datatype_name):
+        """Carga la definición de un tipo de dato compuesto."""
+        if not datatype_name:
+            return None
+            
+        cache_key = f"{version}_dt_{datatype_name}"
+        if cache_key in self.definitions_cache:
+            return self.definitions_cache[cache_key]
+
+        version_path = self.get_version_path(version)
+        # Intentar cargar composite{Name}.xml
+        # A veces los tipos de datos tienen nombres como CE, CX, etc.
+        file_path = os.path.join(version_path, f"composite{datatype_name}.xml")
+        
+        if not os.path.exists(file_path):
+             return None
+
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            self.definitions_cache[cache_key] = root
+            return root
+        except Exception:
+            return None
+
+    def get_field_description(self, version, segment, field_index, definitions=None):
+        """Obtiene la descripción de un campo dado el segmento y el índice (1-based)."""
+        if definitions is None:
+            definitions = self.load_segment_definition(version, segment)
+        
+        if definitions is None:
+            return None
+
+        # Navegar el XML: elements -> field
+        # Nota: Los archivos XML de definición que hemos visto tienen una estructura específica.
+        # <elements>
+        #   <field> <name>PID.1</name> ... </field>
+        # </elements>
+        # Sin embargo, el índice de los fields en el XML suele corresponder al orden.
+        
+        try:
+            elements = definitions.find("elements")
+            if elements is not None:
+                fields = elements.findall("field")
+                # field_index es 1-based.
+                # Ajuste: PID.1 es el primer campo en la lista para PID?
+                # En muchos estándares HL7, MSH es especial.
+                if 0 <= field_index - 1 < len(fields):
+                    field_node = fields[field_index - 1]
+                    description = field_node.find("description").text
+                    datatype = field_node.find("datatype").text
+                    return description, datatype
+        except Exception:
+            pass
+        return None, None
+
+    def get_component_description(self, version, datatype, component_index):
+        """Obtiene la descripción de un componente de un tipo de dato compuesto."""
+        definitions = self.load_datatype_definition(version, datatype)
+        if definitions is None:
+            return None, None
+            
+        try:
+            elements = definitions.find("elements")
+            if elements is not None:
+                fields = elements.findall("field")
+                if 0 <= component_index - 1 < len(fields):
+                    field_node = fields[component_index - 1]
+                    description = field_node.find("description").text
+                    datatype = field_node.find("datatype").text # Puede ser subcomponente
+                    return description, datatype
+        except Exception:
+            pass
+        return None, None
+
+
 # Clase para el resaltado de sintaxis HL7
 class Hl7Highlighter(QSyntaxHighlighter):
     HL7_SEGMENTS = [
@@ -279,6 +406,260 @@ class Hl7Highlighter(QSyntaxHighlighter):
         for match in self.segment_pattern.finditer(text):
             self.setFormat(match.start(1), match.end(1) - match.start(1), self.segment_format)
 
+class MessageDetailWindow(QMainWindow):
+    def __init__(self, message_text, definition_manager, dark_mode=False, parent=None):
+        super().__init__(parent)
+        self.message_text = message_text
+        self.def_manager = definition_manager
+        self.dark_mode = dark_mode
+        self.setWindowTitle("Detalle del Mensaje HL7")
+        self.resize(800, 600)
+        
+        self.init_ui()
+        self.apply_theme()
+        self.parse_message()
+
+    def init_ui(self):
+        self.central_widget = QWidget()
+        # Asignar un objectName para selectores CSS específicos si es necesario
+        self.central_widget.setObjectName("central_widget")
+        self.setCentralWidget(self.central_widget)
+        
+        layout = QVBoxLayout(self.central_widget)
+        
+        # Etiqueta de información
+        self.info_label = QLabel("Analizando mensaje...")
+        self.info_label.setFont(QFont("Arial", 10))
+        layout.addWidget(self.info_label)
+        
+        # Árbol de detalle
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(4)
+        # Reordenado según preferencia: Elemento, Descripción, Tipo de Dato, Valor
+        self.tree.setHeaderLabels(["Elemento", "Descripción", "Tipo de Dato", "Valor"])
+        self.tree.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        
+        # Anchos iniciales razonables
+        self.tree.setColumnWidth(0, 150) # Elemento
+        self.tree.setColumnWidth(1, 250) # Descripción
+        self.tree.setColumnWidth(2, 100) # Tipo
+        self.tree.setColumnWidth(3, 250) # Valor
+        
+        layout.addWidget(self.tree)
+
+    def set_dark_mode(self, dark_mode):
+        self.dark_mode = dark_mode
+        self.apply_theme()
+
+    def apply_theme(self):
+        if self.dark_mode:
+            # Modo oscuro
+            self.setStyleSheet("QMainWindow { background-color: #2b2b2b; color: #d4d4d4; }")
+            self.central_widget.setStyleSheet("QWidget#central_widget { background-color: #2b2b2b; color: #d4d4d4; }")
+            self.tree.setStyleSheet("""
+                QTreeWidget { 
+                    background-color: #232323; 
+                    color: #d4d4d4; 
+                    border: 1px solid #3c3c3c;
+                }
+                QHeaderView::section {
+                    background-color: #3c3c3c;
+                    color: #d4d4d4;
+                    padding: 4px;
+                    border: 1px solid #2b2b2b;
+                }
+                QTreeWidget::item:selected {
+                    background-color: #3d4f6c;
+                }
+            """)
+            self.info_label.setStyleSheet("color: #d4d4d4; background-color: transparent; font-weight: bold;")
+        else:
+            # Modo claro / Default: resetear estilos para heredar del sistema
+            self.setStyleSheet("")
+            self.central_widget.setStyleSheet("")
+            self.tree.setStyleSheet("")
+            self.info_label.setStyleSheet("color: black; background-color: transparent; font-weight: bold;") 
+            self.info_label.setStyleSheet("")
+
+    def parse_message(self):
+        self.tree.clear()
+        if not self.message_text:
+            return
+
+        # Detectar separadores básicos del segmento MSH
+        # MSH|^~\&|...
+        field_sep = '|'
+        comp_sep = '^'
+        rep_sep = '~'
+        esc_char = '\\'
+        sub_sep = '&'
+        
+        # Intentar extraer separadores reales del mensaje
+        if self.message_text.startswith("MSH"):
+            try:
+                # MSH es los primeros 3 chars. El 4to es el separador de campo.
+                field_sep = self.message_text[3]
+                # Los siguientes chars (hasta el siguiente field_sep) son encoding chars
+                # Ej: |^~\&|
+                # Find next field sep
+                next_sep_idx = self.message_text.find(field_sep, 4)
+                if next_sep_idx > 4:
+                    encoding_chars = self.message_text[4:next_sep_idx]
+                    if len(encoding_chars) >= 1: comp_sep = encoding_chars[0]
+                    if len(encoding_chars) >= 2: rep_sep = encoding_chars[1]
+                    if len(encoding_chars) >= 3: esc_char = encoding_chars[2]
+                    if len(encoding_chars) >= 4: sub_sep = encoding_chars[3]
+            except Exception:
+                pass # Usar defaults
+
+        # Normalizar saltos de línea y dividir segmentos
+        segments = self.message_text.strip().split('\n')
+        segments = [s.strip() for s in segments if s.strip()]
+        
+        # Intentar detectar versión
+        version = "2.3" # Default
+        msg_type = ""
+        
+        for seg in segments:
+            if seg.startswith("MSH"):
+                fields = seg.split(field_sep)
+                if len(fields) >= 12:
+                    version = fields[11] # MSH-12
+                if len(fields) >= 9:
+                    msg_type = fields[8] # MSH-9
+                break
+        
+        self.info_label.setText(f"Versión HL7 detectada: {version} | Tipo de mensaje: {msg_type}")
+        self.apply_theme() 
+        
+        for seg in segments:
+            if not seg: continue
+            
+            fields = seg.split(field_sep)
+            seg_name = fields[0]
+            
+            # Cargar definición del segmento
+            seg_def = self.def_manager.load_segment_definition(version, seg_name)
+            
+            # Crear item raíz para el segmento
+            seg_desc = ""
+            if seg_def:
+                try:
+                    seg_desc = seg_def.find("description").text
+                except: pass
+            
+            seg_item = QTreeWidgetItem(self.tree)
+            seg_item.setText(0, seg_name)
+            seg_item.setText(1, seg_desc)
+            seg_item.setText(3, seg) # Mostrar segmento completo en columna valor
+            
+            # Iterar campos
+            # Nota: MSH tiene un manejo especial de índices
+            # MSH-1 es el separador (|)
+            # MSH-2 son los encoding chars (^~\&)
+            # MSH-3 es el primer campo real de datos después de encoding chars
+            # Sin embargo, el split('|') nos da:
+            # [0]=MSH, [1]=^~\&, [2]=SendingApp...
+            # Entonces fields[1] corresponde a MSH-3? No.
+            # fields[0] = "MSH"
+            # fields[1] = "|...|" (contenido entre pipes) -> MSH-3 (Sending App)
+            # ESPERA: MSH-1 es el pipe mismo. MSH-2 son los encoding chars.
+            # Si hago split('|'):
+            # "MSH|^~\&|SendingApp|..."
+            # [0] = MSH
+            # [1] = ^~\& (MSH-2)
+            # [2] = SendingApp (MSH-3)
+            # Entonces index i en fields corresponde a MSH-(i+1)
+            
+            start_index = 1
+            if seg_name == "MSH":
+                # Agregar manualmente MSH.1 y MSH.2 si se desea, o ajustar looping
+                # MSH.1
+                msh1 = QTreeWidgetItem(seg_item)
+                msh1.setText(0, f"{seg_name}.1")
+                msh1.setText(1, "Field Separator")
+                msh1.setText(2, "ST")
+                msh1.setText(3, field_sep)
+                
+                # MSH.2 (fields[1] en el split array es MSH.2)
+                if len(fields) > 1:
+                     msh2 = QTreeWidgetItem(seg_item)
+                     msh2.setText(0, f"{seg_name}.2")
+                     msh2.setText(1, "Encoding Characters")
+                     msh2.setText(2, "ST")
+                     msh2.setText(3, fields[1])
+                
+                start_index = 2 # Comenzar loop desde fields[2] que es MSH.3
+            
+            for i in range(start_index, len(fields)):
+                field_val = fields[i]
+                if not field_val: continue
+                
+                # Calcular índice HL7 real
+                # Para MSH: fields[2] (Sending App) es MSH.3 -> idx = i + 1
+                # Para otros (ej PID): fields[1] (Set ID) es PID.1 -> idx = i
+                hl7_idx = i + 1 if seg_name == "MSH" else i
+                
+                # Manejar repeticiones
+                repetitions = field_val.split(rep_sep)
+                
+                for rep_idx, rep_val in enumerate(repetitions):
+                    display_idx = f"{seg_name}.{hl7_idx}"
+                    if len(repetitions) > 1:
+                        display_idx += f"({rep_idx+1})"
+                    
+                    desc, dt_type = self.def_manager.get_field_description(version, seg_name, hl7_idx)
+                    if not desc: desc = "Unknown"
+                    if not dt_type: dt_type = ""
+
+                    field_item = QTreeWidgetItem(seg_item)
+                    field_item.setText(0, display_idx)
+                    field_item.setText(1, desc)
+                    field_item.setText(2, dt_type)
+                    field_item.setText(3, rep_val)
+                    
+                    # Descomponer componentes si existen
+                    if comp_sep in rep_val:
+                        self.decompose_components(version, dt_type, rep_val, field_item, comp_sep, sub_sep, prefix=display_idx)
+
+    def decompose_components(self, version, datatype, value, parent_item, comp_sep, sub_sep, prefix=""):
+        components = value.split(comp_sep)
+        for j, comp_val in enumerate(components):
+            if not comp_val: continue
+            
+            comp_idx = j + 1
+            # Intentar obtener descripción del componente
+            c_desc, c_type = self.def_manager.get_component_description(version, datatype, comp_idx)
+            if not c_desc: c_desc = f"Component {comp_idx}"
+            if not c_type: c_type = ""
+            
+            c_item = QTreeWidgetItem(parent_item)
+            c_item.setText(0, f"{prefix}.{comp_idx}")
+            c_item.setText(1, c_desc)
+            c_item.setText(2, c_type)
+            c_item.setText(3, comp_val)
+            
+            # Subcomponentes
+            if sub_sep in comp_val:
+                subcomponents = comp_val.split(sub_sep)
+                for k, sub_val in enumerate(subcomponents):
+                    if not sub_val: continue
+                    
+                    sub_idx = k + 1
+                    # Buscar descripción del subcomponente usando el tipo de dato del componente padre (ej: FN)
+                    # get_component_description también sirve para esto: es genérico (composite -> item)
+                    s_desc, s_type = self.def_manager.get_component_description(version, c_type, sub_idx)
+                    
+                    if not s_desc: s_desc = f"Subcomponent {sub_idx}"
+                    if not s_type: s_type = ""
+                    
+                    s_item = QTreeWidgetItem(c_item)
+                    s_item.setText(0, f"{prefix}.{comp_idx}.{sub_idx}")
+                    s_item.setText(1, s_desc)
+                    s_item.setText(2, s_type)
+                    s_item.setText(3, sub_val)
+
+
 class HL7SenderApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -286,8 +667,8 @@ class HL7SenderApp(QMainWindow):
         
         # Usar ruta absoluta para el icono para asegurar que se encuentre
         # independientemente de desde dónde se ejecute el script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(script_dir, "icon.png")
+        # Usar get_resource_path para manejar rutas tanto en dev como en exe
+        icon_path = get_resource_path("icon.png")
         
         if os.path.exists(icon_path):
             app_icon = QIcon(icon_path)
@@ -336,6 +717,14 @@ class HL7SenderApp(QMainWindow):
         
         # Restaurar geometría de la ventana
         self.restore_window_geometry()
+        
+        # Inicializar Definition Manager
+        # Asumiendo que 'reference' está en el mismo directorio que el script
+        
+        # Inicializar Definition Manager
+        # Usar get_resource_path con cadena vacía o '.' para obtener el base_path correcto
+        base_path = get_resource_path(".")
+        self.hl7_def_manager = HL7DefinitionManager(base_path)
 
     def create_menus(self):
         menubar = self.menuBar()
@@ -540,6 +929,10 @@ class HL7SenderApp(QMainWindow):
         self.format_msg_btn.clicked.connect(self.format_message_for_display)
         btn_layout.addWidget(self.format_msg_btn)
 
+        self.detail_btn = QPushButton("Detalle del Mensaje")
+        self.detail_btn.clicked.connect(self.show_message_detail)
+        btn_layout.addWidget(self.detail_btn)
+
         self.test_conn_btn = QPushButton(self.tr("test_btn"))
         self.test_conn_btn.clicked.connect(self.test_connection)
         btn_layout.addWidget(self.test_conn_btn)
@@ -693,11 +1086,55 @@ class HL7SenderApp(QMainWindow):
             # Valores por defecto si no hay configuración guardada
             self.setGeometry(100, 100, 960, 700)
     
+    def show_message_detail(self):
+        msg = self.msg_text.toPlainText()
+        if not msg:
+            return
+            
+        # Intentar detectar versión rápidamente antes de abrir nada
+        # Necesitamos la versión para verificar si existen definiciones
+        version = "2.3" # Default
+        field_sep = '|'
+        
+        if msg.startswith("MSH"):
+             try:
+                 # Obtener solo el primer segmento (MSH)
+                 msh_segment = msg.split('\n')[0].strip()
+                 field_sep = msh_segment[3]
+                 fields = msh_segment.split(field_sep)
+                 if len(fields) >= 12:
+                     version = fields[11]
+             except: pass
+        
+        # path = self.hl7_def_manager.get_version_path(version)
+        # print(f"DEBUG: Msg Version: '{version}'")
+        # print(f"DEBUG: Check Path: '{path}'")
+        # print(f"DEBUG: Exists? {os.path.isdir(path)}")
+        
+        if not self.hl7_def_manager.is_version_available(version):
+            QMessageBox.warning(self, "Definiciones Faltantes", 
+                f"No se pueden cargar los detalles: No se encontraron definiciones para la versión HL7 {version}.\n"
+                "Verifique que la carpeta 'reference' contenga los archivos necesarios.")
+            return
+
+        self.detail_window = MessageDetailWindow(msg, self.hl7_def_manager, self.dark_mode, self)
+        self.detail_window.show()
+
     def toggle_dark_mode(self):
         """Alterna entre modo claro y oscuro."""
         self.dark_mode = self.dark_mode_action.isChecked()
         self.apply_theme()
         
+        # Actualizar ventana de detalle si está abierta
+        if hasattr(self, 'detail_window'):
+             # Comprobar si la ventana sigue existiendo (no ha sido cerrada/eliminada por Qt)
+             # PySide/PyQt wrappers pueden quedar invalidated.
+             try:
+                 if self.detail_window.isVisible():
+                     self.detail_window.set_dark_mode(self.dark_mode)
+             except RuntimeError:
+                 pass # El objeto C++ ya fue eliminado
+
         # Guardar la preferencia
         settings = self._read_settings()
         if "state" not in settings:
