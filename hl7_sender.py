@@ -39,7 +39,7 @@ def get_resource_path(relative_path):
     
     return os.path.join(base_path, relative_path)
 
-VERSION = "1.0"
+VERSION = "1.1"
 
 def get_app_config_path(app_name):
     """Devuelve la ruta estándar para la configuración de la aplicación."""

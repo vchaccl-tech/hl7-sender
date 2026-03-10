@@ -5,6 +5,17 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.1] - 2026-03-10
+
+### Añadido
+- Nuevo Gestor de Definiciones HL7 (`HL7DefinitionManager`) que carga definiciones XML para estructuras HL7.
+- Nueva ventana de Detalles de Mensaje ("Message Details") con parseo semántico y diagrama de árbol de los segmentos.
+- Soporte para mostrar descripciones detalladas de campos y componentes de tipos de datos compuestos basados en la versión del mensaje HL7.
+- Modo oscuro dinámico compatible con la nueva ventana de detalles.
+
+### Cambiado
+- Se incluyó la carpeta `reference` (con los esquemas XML) dentro de las instrucciones de empaquetado de PyInstaller (`hl7_sender.spec`).
+
 ## [1.0] - 2025-12-03
 
 ### Características Principales
